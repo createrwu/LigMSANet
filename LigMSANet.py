@@ -18,20 +18,6 @@ from tensorflow.keras import layers
 
 
 
-def CBAM(x, ratio=4):
-    conv_kernel_initializer = RandomNormal(stddev=0.01)
-    w = GlobalAveragePooling2D()(x)
-    w = Dense(int(w.shape[-1]) // ratio, use_bias=False,activation=relu)(w)
-    w = Dense(int(x.shape[-1]), use_bias=False,activation=hard_sigmoid)(w)
-    x_channel = Multiply()([x,w])
-    
-    avg_pool = Lambda(lambda x: K.mean(x, axis=3, keepdims=True))(x_channel)
-    max_pool = Lambda(lambda x: K.max(x, axis=3, keepdims=True))(x_channel)
-    concat = Concatenate(axis=3)([avg_pool, max_pool])
-    concat = Conv2D(1, (3,3), strides=(1, 1), padding='same', kernel_initializer=conv_kernel_initializer, activation='sigmoid')(concat)
-    x = multiply([x_channel, concat])
-    return x
-
 
 
 def Conv2d_BN(x, nb_filter, kernel_size, strides=(1, 1), padding='same', use_activation=True):
@@ -43,11 +29,9 @@ def Conv2d_BN(x, nb_filter, kernel_size, strides=(1, 1), padding='same', use_act
     else:
         return x
 
-# relu6！
 def relu6(x):
     return K.relu(x, max_value=6)
-    
-# 用于计算padding的大小
+
 def correct_pad(inputs, kernel_size):
     img_dim = 1
     input_size = backend.int_shape(inputs)[img_dim:(img_dim + 2)]
@@ -65,7 +49,7 @@ def correct_pad(inputs, kernel_size):
     return ((correct[0] - adjust[0], correct[0]),
             (correct[1] - adjust[1], correct[1]))
 
-# 使其结果可以被8整除，因为使用到了膨胀系数α
+
 def _make_divisible(v, divisor, min_value=None):
     if min_value is None:
         min_value = divisor
@@ -80,7 +64,7 @@ def _inverted_res_block(inputs, expansion, stride, alpha, filters, block_id):
     x = inputs
     prefix = 'mobl{}_'.format(block_id)+'conv_{}_'.format(block_id)
     prefix1 = 'bn{}_'.format(block_id)+'conv_{}_'.format(block_id)
-    # part1 数据扩张
+
     if block_id:
         # Expand
         x = Conv2D(expansion * in_channels,
@@ -96,8 +80,7 @@ def _inverted_res_block(inputs, expansion, stride, alpha, filters, block_id):
 
     if stride == 2:
         x = ZeroPadding2D(padding=correct_pad(x, 3))(x)
-    
-    # part2 可分离卷积
+
     x = DepthwiseConv2D(kernel_size=3,
                                strides=stride,
                                activation=None,
@@ -110,7 +93,7 @@ def _inverted_res_block(inputs, expansion, stride, alpha, filters, block_id):
 
     x = Activation(relu6)(x)
 
-    # part3压缩特征，而且不使用relu函数，保证特征不被破坏
+
     x = Conv2D(pointwise_filters,
                       kernel_size=1,
                       padding='same',
@@ -123,7 +106,7 @@ def _inverted_res_block(inputs, expansion, stride, alpha, filters, block_id):
     if in_channels == pointwise_filters and stride == 1:
         return Add()([inputs, x])
     return x 
-################################################################################################################################################################
+
 
 def dw_4(input_shape=(None, None, 3),BN=True,alpha=1.0, include_top=False, weights='imagenet'):
     rows = 224    
@@ -160,10 +143,8 @@ def dw_4(input_shape=(None, None, 3),BN=True,alpha=1.0, include_top=False, weigh
     x = _inverted_res_block(x, filters=96, alpha=alpha, stride=1,expansion=6, block_id=10)
     x = _inverted_res_block(x, filters=96, alpha=alpha, stride=1,expansion=6, block_id=11)
     x = _inverted_res_block(x, filters=96, alpha=alpha, stride=1,expansion=6, block_id=12)
-#########################################################################################################
-##########################################
 
-# FPM
+
     xs = []
     # branch 1
     x1_3 = DepthwiseConv2D(kernel_size = (3, 3), strides=(1, 1), padding='same',
@@ -233,15 +214,13 @@ def dw_4(input_shape=(None, None, 3),BN=True,alpha=1.0, include_top=False, weigh
     x1_3_5_7_9 = Activation('relu',  name='fpm1_3_5_7_9_relu')(x1_3_5_7_9)
     xs.append(x1_3_5_7_9)
     x1_3_5_7_9_1 = Lambda(lambda x: tf. keras.backend.expand_dims(x, axis=-1))(x1_3_5_7_9)
-    
-################################################   
- 
-    #Add
-    x1_Add = Add(name='1_add')(xs)#[?, ?, ?, 32]
-    # concat
-    x_cat = concatenate([x1_3_1, x1_3_5_1, x1_3_5_7_1, x1_3_5_7_9_1],axis=-1)#[?, ?, ?,32,4]
 
-    #GAM
+ 
+
+    x1_Add = Add(name='1_add')(xs)
+    # concat
+    x_cat = concatenate([x1_3_1, x1_3_5_1, x1_3_5_7_1, x1_3_5_7_9_1],axis=-1)
+
     x1_gam = GlobalAveragePooling2D()(x1_Add)
     x1_gam = Reshape((1,1,-1), name='1_7_reshape')(x1_gam)
     x1_gam = Conv2D(4, (1, 1), strides=(1, 1), padding='same', kernel_initializer=conv_kernel_initializer, name='gam1_1_conv2d')(x1_gam)
@@ -253,10 +232,9 @@ def dw_4(input_shape=(None, None, 3),BN=True,alpha=1.0, include_top=False, weigh
     fatt1_4 = Conv2D(32, (1, 1), strides=(1, 1), padding='same', kernel_initializer=conv_kernel_initializer,name='gam1_4_sigmoid')(x1_gam)
     fatt1_cat = concatenate([fatt1_1, fatt1_2, fatt1_3, fatt1_4])#[?, ?, ?, 128]
     fatt1_cat_reshape = Reshape((1, 1,32,4), name='1_2_reshape')(fatt1_cat)  
-    attention_softmax = Softmax(axis=-1)(fatt1_cat_reshape)#[?,1,1,32, 4]
-    F_output = multiply([attention_softmax,x_cat])#[?,50,50,32, 4]
-    
-########################################
+    attention_softmax = Softmax(axis=-1)(fatt1_cat_reshape)
+    F_output = multiply([attention_softmax,x_cat])
+
 
     attention = []
     
@@ -278,8 +256,7 @@ def dw_4(input_shape=(None, None, 3),BN=True,alpha=1.0, include_top=False, weigh
     feature = Add(name='2_add')(attention)
  
     x = concatenate([x,feature])
-#########################################################################################################
-#########################################################################################################    
+
     # FPM
     xx = []
     # branch 1
@@ -351,13 +328,12 @@ def dw_4(input_shape=(None, None, 3),BN=True,alpha=1.0, include_top=False, weigh
     xx.append(x1_3_5_7_9)
     x1_3_5_7_9_1 = Lambda(lambda x: tf. keras.backend.expand_dims(x, axis=-1))(x1_3_5_7_9)
     
-################################################   
+
  
     #Add
     x2_Add = Add(name='3_add')(xx)#[?, ?, ?, 32]
     # concat
-    x_cat = concatenate([x1_3_1, x1_3_5_1, x1_3_5_7_1, x1_3_5_7_9_1],axis=-1)#[?, ?, ?,32,4]
-
+    x_cat = concatenate([x1_3_1, x1_3_5_1, x1_3_5_7_1, x1_3_5_7_9_1],axis=-1)
     #GAM
     x1_gam = GlobalAveragePooling2D()(x2_Add)
     x1_gam = Reshape((1,1,-1), name='2_7_reshape')(x1_gam)
@@ -368,12 +344,11 @@ def dw_4(input_shape=(None, None, 3),BN=True,alpha=1.0, include_top=False, weigh
     fatt1_2 = Conv2D(32, (1, 1), strides=(1, 1), padding='same', kernel_initializer=conv_kernel_initializer,name='gam2_2_sigmoid')(x1_gam)   
     fatt1_3 = Conv2D(32, (1, 1), strides=(1, 1), padding='same', kernel_initializer=conv_kernel_initializer,name='gam2_3_sigmoid')(x1_gam)
     fatt1_4 = Conv2D(32, (1, 1), strides=(1, 1), padding='same', kernel_initializer=conv_kernel_initializer,name='gam2_4_sigmoid')(x1_gam)
-    fatt1_cat = concatenate([fatt1_1, fatt1_2, fatt1_3, fatt1_4])#[?, ?, ?, 128]
+    fatt1_cat = concatenate([fatt1_1, fatt1_2, fatt1_3, fatt1_4])
     fatt1_cat_reshape = Reshape((1, 1,32,4), name='2_2_reshape')(fatt1_cat)  
-    attention_softmax = Softmax(axis=-1)(fatt1_cat_reshape)#[?,1,1,32, 4]
-    F_output = multiply([attention_softmax,x_cat])#[?,50,50,32, 4]
+    attention_softmax = Softmax(axis=-1)(fatt1_cat_reshape)
+    F_output = multiply([attention_softmax,x_cat])
     
-########################################
 
     attention2 = []
     
@@ -396,7 +371,6 @@ def dw_4(input_shape=(None, None, 3),BN=True,alpha=1.0, include_top=False, weigh
  
     x = concatenate([x,feature])
 
-#########################################################################################################
  
     x = DepthwiseConv2D(kernel_size = (3, 3), strides=(1, 1), padding='same',
                            depthwise_initializer=conv_kernel_initializer, use_bias=False, name='1_dconv2d')(x)
@@ -423,70 +397,22 @@ def dw_4(input_shape=(None, None, 3),BN=True,alpha=1.0, include_top=False, weigh
     output_flow = Conv2D(1, 1, strides=(1, 1), padding='same', activation='relu', kernel_initializer=conv_kernel_initializer,name='1_1_Conv1')(x)
     model = Model(inputs=input_flow, outputs=output_flow)
     
-#########################################################################################################    
+
     # Load weights.
     if weights == 'imagenet':
         if include_top:
             model_name = ('mobilenet_v2_weights_tf_dim_ordering_tf_kernels_' +
                           str(alpha) + '_' + str(rows) + '.h5')
-            weight_path = ('/home/wurui/.keras/models/mobilenet_v2_weights_tf_dim_ordering_tf_kernels_1.0_224.h5')
+            weight_path = ('.keras/models/mobilenet_v2_weights_tf_dim_ordering_tf_kernels_1.0_224.h5')
             weights_path = get_file(
                 model_name, weight_path, cache_subdir='models')
         else:
             model_name = ('mobilenet_v2_weights_tf_dim_ordering_tf_kernels_' +
                           str(alpha) + '_' + str(rows) + '_no_top' + '.h5')
-            weight_path = ('/home/wurui/.keras/models/mobilenet_v2_weights_tf_dim_ordering_tf_kernels_1.0_224_no_top1.h5')
+            weight_path = ('.keras/models/mobilenet_v2_weights_tf_dim_ordering_tf_kernels_1.0_224_no_top1.h5')
             weights_path = get_file(
                 model_name, weight_path, cache_subdir='models')
-        model.load_weights('/home/wurui/.keras/models/mobilenet_v2_weights_tf_dim_ordering_tf_kernels_1.0_224_no_top1.h5',by_name = True)
+        model.load_weights('.keras/models/mobilenet_v2_weights_tf_dim_ordering_tf_kernels_1.0_224_no_top1.h5',by_name = True)
     elif weights is not None:
         model.load_weights(weights)
     return model
-    
-################################################################################################################################################################
-
-#    for layer in model.layers:
-#        layer.trainable = False
-# 或者使用如下方法冻结所有层
-# model.trainable = False 
-#    model.layers[-1].trainable = True
-#    model.layers[-2].trainable = True
-#    model.layers[-3].trainable = True
-#    model.layers[-4].trainable = True
-#    model.layers[-5].trainable = True
-#    model.layers[-6].trainable = True
-#    model.layers[-7].trainable = True
-    
-    # 可训练层
-#    for x in model.trainable_weights:
-#        print(x.name)
-#    print('\n')
-
-# 不可训练层
-#    for x in model.non_trainable_weights:
-#        print(x.name)
-#    print('\n')
-
-
-
-#    front_end =model.load_weights('/home/wurui/.keras/models/mobilenet_v2_weights_tf_dim_ordering_tf_kernels_1.0_224_no_top.h5')
-#    front_end = mobilenet_v2.MobileNetV2(weights='imagenet', include_top=False,
-#                                          backend=keras.backend,
-#                                          layers=keras.layers,
-#                                          models=keras.models,
-#                                          utils=keras.utils
-#                                          )
-
-#    weights_front_end = []
-#    for layer in front_end.layers:
-#        if 'conv' in layer.name:
-#            weights_front_end.append(layer.get_weights())
-#    counter_conv = 0
-#    for i in range(len(front_end.layers)):
-#        if counter_conv >= 10:
-#            break
-#        if 'conv' in model.layers[i].name:
-#            model.layers[i].set_weights(weights_front_end[counter_conv])
-#            counter_conv += 1
-
-#    return model
