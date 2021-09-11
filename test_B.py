@@ -115,7 +115,7 @@ def Create_Point_Matrix(point_path):
   
 
 if __name__ == '__main__':
-    os.environ["CUDA_VISIBLE_DEVICES"] = "1,0"
+    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
     error_list = []
     time_list = []
     img_paths,point_paths=get_img_path()
@@ -124,7 +124,7 @@ if __name__ == '__main__':
     model = model_from_json(model_json, custom_objects={"hard_swish":hard_swish,'relu6': keras.layers.ReLU(6.), 'DepthwiseConv2D': keras.layers.DepthwiseConv2D,'PAM':PAM,'CAM':CAM, 'tf': tf})
     model.load_weights('./weights_B/weights-improvement-014-1.8430-2.6278.h5',by_name=True)
     model.compile(optimizer='Adam',loss=mse_loss,metrics=[RMSE,MAE])    
-    print('num£º',len(img_paths))
+    print('numÂ£Âº',len(img_paths))
     for i in range(len(img_paths)):
         img=img_resize(img_paths[i])
         t1 = time.time()
