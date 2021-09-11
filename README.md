@@ -5,3 +5,9 @@ Scale variation and real-time counting are challenging problems for crowd counti
 1 Environment<br>
 Env: Python 3.7; keras 2.3.1; CUDA 10.1; <br>
 Install some packages
+
+## Resoult on ShanghaiTech Part B
+
+Method            | MAE  | MSE | Params (MB)  |  Runtime | fps | FLOPs 
+ ----             | -----| ------|   ---- | ----- | ------  | ------ 
+ LigMSANet(ours)  | 10.9 | 17.5 | 0.63| 44| 22.7| 1.3
