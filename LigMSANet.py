@@ -108,7 +108,7 @@ def _inverted_res_block(inputs, expansion, stride, alpha, filters, block_id):
     return x 
 
 
-def dw_4(input_shape=(None, None, 3),BN=True,alpha=1.0, include_top=False, weights='imagenet'):
+def LigMSANet(input_shape=(None, None, 3),BN=True,alpha=1.0, include_top=False, weights='imagenet'):
     rows = 224    
     input_flow = Input(shape=input_shape)    
     dilated_conv_kernel_initializer = RandomNormal(stddev=0.01)
